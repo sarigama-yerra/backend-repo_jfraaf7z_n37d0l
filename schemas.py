@@ -1,48 +1,90 @@
 """
-Database Schemas
+Database Schemas for BugSage
 
-Define your MongoDB collection schemas here using Pydantic models.
-These schemas are used for data validation in your application.
-
-Each Pydantic model represents a collection in your database.
-Model name is converted to lowercase for the collection name:
-- User -> "user" collection
-- Product -> "product" collection
-- BlogPost -> "blogs" collection
+Each Pydantic model represents a MongoDB collection. The collection name is the lowercase of the class name.
 """
+from __future__ import annotations
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+from pydantic import BaseModel, Field, EmailStr
 
-from pydantic import BaseModel, Field
-from typing import Optional
-
-# Example schemas (replace with your own):
+# -----------------------------
+# Core Entities
+# -----------------------------
 
 class User(BaseModel):
-    """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
-    """
     name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
+    email: EmailStr = Field(..., description="Email address")
+    role: str = Field("developer", description="Role: admin, developer, qa, manager")
+    avatar_url: Optional[str] = Field(None, description="Profile image URL")
     is_active: bool = Field(True, description="Whether user is active")
 
-class Product(BaseModel):
-    """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
-    """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
+class Project(BaseModel):
+    name: str = Field(..., description="Project display name")
+    key: str = Field(..., description="Short unique key, e.g., BUGSAGE")
+    description: Optional[str] = Field(None)
+    repo_url: Optional[str] = Field(None, description="VCS repository URL")
+    members: List[Dict[str, Any]] = Field(default_factory=list, description="List of {user_id, role}")
 
-# Add your own schemas here:
-# --------------------------------------------------
+class Attachment(BaseModel):
+    name: str
+    url: str
+    type: str = Field("file", description="file, image, log")
 
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+class StatusChange(BaseModel):
+    from_status: Optional[str] = None
+    to_status: str
+    at: datetime = Field(default_factory=datetime.utcnow)
+    by: Optional[str] = None
+    note: Optional[str] = None
+
+class Comment(BaseModel):
+    author_id: Optional[str] = None
+    author_name: Optional[str] = None
+    message: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class Bug(BaseModel):
+    title: str
+    description: str
+    project_id: Optional[str] = None
+    reporter_id: Optional[str] = None
+    assignee_id: Optional[str] = None
+    priority: str = Field("medium", description="low, medium, high, urgent")
+    severity: str = Field("minor", description="minor, major, critical, blocker")
+    status: str = Field("triage", description="triage, fix, verify, closed, reopened")
+    module_path: Optional[str] = Field(None, description="Path or name of the affected module")
+    tags: List[str] = Field(default_factory=list)
+    steps_to_reproduce: Optional[str] = None
+    environment: Optional[str] = None
+    attachments: List[Attachment] = Field(default_factory=list)
+    logs: Optional[str] = None
+    comments: List[Comment] = Field(default_factory=list)
+    history: List[StatusChange] = Field(default_factory=list)
+    reopened_count: int = 0
+    resolved_at: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+
+class Commit(BaseModel):
+    project_id: Optional[str] = None
+    module_path: Optional[str] = None
+    author: Optional[str] = None
+    message: str
+    additions: int = 0
+    deletions: int = 0
+    files: List[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+# Optional: lightweight configuration entities
+class IntegrationConfig(BaseModel):
+    provider: str
+    settings: Dict[str, Any] = Field(default_factory=dict)
+
+# The Flames database viewer will read these via GET /schema
+ALL_MODELS = {
+    "user": User,
+    "project": Project,
+    "bug": Bug,
+    "commit": Commit,
+    "integrationconfig": IntegrationConfig,
+}
